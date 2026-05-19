@@ -5,11 +5,16 @@ export const formatSalary = (min, max, type) => {
   return `${fmt(min)} - ${fmt(max)} ₭${label[type] || ''}`;
 };
 
-export const categoryIcons = {
-  'ຮ້ານອາຫານ': '🍽️', 'ຮ້ານຄ້າ': '🛍️', 'ການສຶກສາ': '📚',
-  'ເຕັກໂນໂລຊີ': '💻', 'ການຕະຫຼາດ': '📢', 'ບໍລິການ': '🤝',
-  'ການເງິນ': '💰', 'ສຸຂະພາບ': '🏥', 'ຂົນສົ່ງ': '🚛', 'ອື່ນໆ': '💼',
+export const API_BASE = 'http://localhost:8080';
+
+// ສ້າງ full URL ສຳລັບ logo/cover
+export const getFullUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  return `${API_BASE}${path}`;
 };
+
+export const categoryIcons = {};
 
 export const statusColor = {
   pending: 'bg-yellow-100 text-yellow-700',

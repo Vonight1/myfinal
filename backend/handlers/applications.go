@@ -3,18 +3,22 @@ package handlers
 import (
 	"backend/config"
 	"backend/models"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ApplyJob - ສະໝັກວຽກ
+// ApplyJob - ສະໝັກວຽກ (ພ້ອມ upload CV/Resume)
 func ApplyJob(c *gin.Context) {
 	jobID := c.Param("id")
 	applicantID, _ := c.Get("user_id")
 
-	var req models.ApplyJobRequest
-	c.ShouldBindJSON(&req)
+	// ອ່ານ cover letter ຈາກ form
+	coverLetter := c.PostForm("cover_letter")
 
 	// ກວດສອບວ່າວຽກຍັງເປີດຢູ່
 	var jobStatus string
@@ -39,17 +43,61 @@ func ApplyJob(c *gin.Context) {
 		return
 	}
 
-	// ບັນທຶກການສະໝັກ
+	// ===== Handle File Upload =====
+	var resumePath *string
+
+	file, header, err := c.Request.FormFile("resume_file")
+	if err == nil {
+		defer file.Close()
+
+		// ກວດສອບຂະໜາດ (10MB)
+		if header.Size > 10*1024*1024 {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ໄຟລ໌ໃຫຍ່ເກີນໄປ (ສູງສຸດ 10MB)"})
+			return
+		}
+
+		// ກວດສອບປະເພດ
+		ext := filepath.Ext(header.Filename)
+		allowedExts := map[string]bool{".pdf": true, ".doc": true, ".docx": true, ".jpg": true, ".jpeg": true, ".png": true}
+		if !allowedExts[ext] {
+			c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ຮອງຮັບສະເພາະ PDF, DOC, DOCX, JPG, PNG"})
+			return
+		}
+
+		// ສ້າງ folder uploads/resumes
+		uploadDir := "./uploads/resumes"
+		os.MkdirAll(uploadDir, os.ModePerm)
+
+		// ສ້າງຊື່ໄຟລ໌ unique
+		filename := fmt.Sprintf("resume_%v_%d%s", applicantID, time.Now().UnixNano(), ext)
+		savePath := filepath.Join(uploadDir, filename)
+
+		// ບັນທຶກໄຟລ໌
+		if err := c.SaveUploadedFile(header, savePath); err != nil {
+			c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບໍ່ສາມາດບັນທຶກໄຟລ໌ໄດ້"})
+			return
+		}
+
+		// URL ສຳລັບ access ໄຟລ໌
+		fileURL := "/uploads/resumes/" + filename
+		resumePath = &fileURL
+	}
+
+	// ===== ບັນທຶກການສະໝັກ =====
 	_, err = config.DB.Exec(
-		`INSERT INTO applications (job_id, applicant_id, cover_letter) VALUES ($1, $2, $3)`,
-		jobID, applicantID, nullIfEmpty(req.CoverLetter),
+		`INSERT INTO applications (job_id, applicant_id, cover_letter, resume_file) VALUES ($1, $2, $3, $4)`,
+		jobID, applicantID, nullIfEmpty(coverLetter), resumePath,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບໍ່ສາມາດສະໝັກໄດ້"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Message: "ສະໝັກວຽກສຳເລັດ"})
+	c.JSON(http.StatusCreated, models.APIResponse{
+		Success: true,
+		Message: "ສະໝັກວຽກສຳເລັດ",
+		Data:    gin.H{"resume_file": resumePath},
+	})
 }
 
 // GetMyApplications - ວຽກທີ່ຂ້ອຍສະໝັກ

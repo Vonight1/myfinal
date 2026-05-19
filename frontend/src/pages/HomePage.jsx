@@ -1,20 +1,46 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { jobsAPI } from '../lib/api';
-import { formatSalary, categoryIcons } from '../lib/utils';
+import { formatSalary, getFullUrl } from '../lib/utils';
+import CompanyAvatar from '../components/CompanyAvatar';
+
+const categoryImages = {
+  'ການເງິນ': 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&q=80',
+  'ການສຶກສາ': 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=600&q=80',
+  'ການຕະຫຼາດ': 'https://images.unsplash.com/photo-1611926653458-09294b3142bf?w=600&q=80',
+  'ຂົນສົ່ງ': 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=600&q=80',
+  'ສຸຂະພາບ': 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600&q=80',
+  'ບໍລິການ': 'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=600&q=80',
+  'ຮ້ານຄ້າ': 'https://images.unsplash.com/photo-1604719312566-8912e9227c6a?w=600&q=80',
+  'ຮ້ານອາຫານ': 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&q=80',
+  'ເຕັກໂນໂລຊີ': 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=600&q=80',
+  'ອື່ນໆ': 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&q=80',
+};
+
+const defaultCover = 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=80';
 
 export default function HomePage() {
   const [categories, setCategories] = useState([]);
   const [latestJobs, setLatestJobs] = useState([]);
+  const [stats, setStats] = useState(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [seenCategories, setSeenCategories] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('seenCategories') || '{}'); }
+    catch { return {}; }
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
-    Promise.all([jobsAPI.getCategories(), jobsAPI.getJobs({ per_page: 4 })])
-      .then(([catRes, jobRes]) => {
+    Promise.all([
+      jobsAPI.getCategories(),
+      jobsAPI.getJobs({ per_page: 6 }),
+      jobsAPI.getStats(),
+    ])
+      .then(([catRes, jobRes, statsRes]) => {
         if (catRes.data.success) setCategories(catRes.data.data || []);
         if (jobRes.data.success) setLatestJobs(jobRes.data.data || []);
+        if (statsRes.data.success) setStats(statsRes.data.data);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -25,70 +51,165 @@ export default function HomePage() {
     navigate(`/jobs?search=${encodeURIComponent(search)}`);
   };
 
+  const handleCategoryClick = (catId, jobCount) => {
+    const updated = { ...seenCategories, [catId]: jobCount };
+    setSeenCategories(updated);
+    localStorage.setItem('seenCategories', JSON.stringify(updated));
+  };
+
+  const getUnseenCount = (catId, jobCount) => {
+    const lastSeen = seenCategories[catId] || 0;
+    return Math.max(0, jobCount - lastSeen);
+  };
+
   return (
-    <div>
-      {/* Hero */}
-      <section className="bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-800 text-white py-20">
-        <div className="max-w-5xl mx-auto px-4 text-center">
-          <div className="inline-block bg-yellow-500 text-blue-900 text-xs font-bold px-4 py-1 rounded-full mb-6">🇱🇦 ສຳລັບຄົນລາວ</div>
-          <h1 className="text-4xl md:text-6xl font-black mb-4">ຊອກຫາວຽກ <span className="text-yellow-400">Part-time</span></h1>
-          <p className="text-lg text-blue-200 mb-8 max-w-2xl mx-auto">ແພລດຟອມອັນດັບ 1 ສຳລັບຊອກຫາວຽກ Part-time ໃນ ສປປ ລາວ</p>
-          <form onSubmit={handleSearch} className="bg-white rounded-2xl p-2 max-w-2xl mx-auto flex gap-2 shadow-2xl">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ຄົ້ນຫາວຽກ... ເຊັ່ນ: ພະນັກງານກາເຟ" className="flex-1 px-5 py-3 text-gray-700 text-sm rounded-xl outline-none" />
-            <button type="submit" className="bg-blue-700 text-white px-8 py-3 rounded-xl font-semibold hover:bg-blue-800 whitespace-nowrap"> ຊອກຫາ</button>
+    <div className="bg-gradient-to-b from-blue-50 to-white min-h-screen">
+      {/* ===== Hero ===== */}
+      <section className="pt-16 pb-12">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h1 className="text-3xl md:text-5xl font-extrabold text-gray-800 mb-4">
+            ຊອກວຽກ <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Part-time</span>?
+          </h1>
+          <p className="text-gray-500 mb-8 text-base md:text-lg">ແພລດຟອມຊອກຫາວຽກ Part-time ໃນ ສປປ ລາວ</p>
+
+          <form onSubmit={handleSearch} className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-full shadow-xl border-2 border-blue-100 p-2 flex items-center gap-2 focus-within:border-blue-400 transition-all">
+              <input value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="ຄົ້ນຫາວຽກ... ເຊັ່ນ: ພະນັກງານກາເຟ"
+                className="flex-1 px-5 py-3 text-gray-700 text-sm outline-none bg-transparent" />
+              <button type="submit" className="bg-blue-600 text-white px-7 py-3 rounded-full font-semibold hover:bg-blue-700 transition-colors text-sm">ຄົ້ນຫາ</button>
+            </div>
           </form>
+
+          {stats && (
+            <div className="flex justify-center gap-8 md:gap-16 mt-10">
+              <Link to="/new-jobs" className="text-center hover:scale-110 transition-transform">
+                <div className="text-3xl md:text-4xl font-black text-blue-600">{stats.new_jobs_today}</div>
+                <div className="text-xs md:text-sm text-gray-500 mt-1">ວຽກໃໝ່</div>
+              </Link>
+              <div className="w-px bg-gray-200"></div>
+              <Link to="/jobs" className="text-center hover:scale-110 transition-transform">
+                <div className="text-3xl md:text-4xl font-black text-green-600">{stats.approved_jobs}</div>
+                <div className="text-xs md:text-sm text-gray-500 mt-1">ກຳລັງເປີດຮັບ</div>
+              </Link>
+              <div className="w-px bg-gray-200 hidden md:block"></div>
+              <div className="text-center hidden md:block">
+                <div className="text-3xl md:text-4xl font-black text-purple-600">{stats.total_companies}</div>
+                <div className="text-xs md:text-sm text-gray-500 mt-1">ບໍລິສັດ</div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Categories */}
-      <section className="max-w-6xl mx-auto px-4 py-16">
-        <h2 className="text-2xl font-bold text-center mb-8"> ໝວດໝູ່ວຽກ</h2>
-        {loading ? (
-          <div className="flex justify-center py-10"><div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {categories.map((cat) => (
-              <Link key={cat.id} to={`/jobs?category_id=${cat.id}`} className="bg-white border-2 border-gray-100 rounded-2xl p-5 text-center hover:border-blue-300 hover:shadow-lg transition-all group">
-                <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">{categoryIcons[cat.name]}</div>
-                <div className="font-semibold text-gray-800 text-sm">{cat.name}</div>
-                <div className="text-xs text-gray-400 mt-1">{cat.job_count || 0} ວຽກ</div>
-              </Link>
-            ))}
+      {/* ===== Categories ===== */}
+      <section className="max-w-7xl mx-auto px-4 pb-16">
+        <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 border border-gray-100">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl md:text-2xl font-bold text-gray-800">ໝວດໝູ່ວຽກ</h2>
+            <Link to="/jobs" className="text-sm text-blue-600 font-semibold hover:underline">ເບິ່ງທັງໝົດ →</Link>
           </div>
-        )}
+          {loading ? (
+            <div className="flex justify-center py-10"><div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {categories.map((cat) => {
+                const unseen = getUnseenCount(cat.id, cat.job_count || 0);
+                const imgUrl = categoryImages[cat.name] || categoryImages['ອື່ນໆ'];
+                return (
+                  <Link key={cat.id} to={`/jobs?category_id=${cat.id}`}
+                    onClick={() => handleCategoryClick(cat.id, cat.job_count || 0)}
+                    className="relative rounded-2xl overflow-hidden group cursor-pointer h-32 md:h-40 shadow-md hover:shadow-xl transition-all">
+                    <img src={imgUrl} alt={cat.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20 group-hover:from-black/90 transition-all"></div>
+                    {unseen > 0 && (
+                      <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold min-w-[22px] h-5 px-1.5 rounded-full flex items-center justify-center shadow-lg animate-pulse">{unseen}</div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4 text-white">
+                      <h3 className="font-bold text-sm md:text-base">{cat.name}</h3>
+                      <p className="text-xs text-gray-200 mt-0.5">{cat.job_count || 0} ວຽກ</p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </section>
 
-      {/* Latest Jobs */}
-      <section className="bg-gray-50 py-16">
-        <div className="max-w-6xl mx-auto px-4">
-          <h2 className="text-2xl font-bold text-center mb-8"> ວຽກລ່າສຸດ</h2>
+      {/* ===== Top 5 Companies (ມີ logo) ===== */}
+      {stats?.top_companies?.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 pb-16">
+          <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 border border-gray-100">
+            <h2 className="text-xl md:text-2xl font-bold text-gray-800 mb-2">ບໍລິສັດຍອດນິຍົມ</h2>
+            <p className="text-sm text-gray-500 mb-6">Top 5 ບໍລິສັດທີ່ມີວຽກຫຼາຍທີ່ສຸດ</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              {stats.top_companies.map((company, i) => (
+                <div key={i} className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 text-center hover:shadow-lg transition-all relative border border-blue-100">
+                  <div className={`absolute -top-3 -left-3 w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-md ${
+                    i === 0 ? 'bg-yellow-500' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-600' : 'bg-blue-500'
+                  }`}>{i + 1}</div>
+                  <div className="flex justify-center mb-3">
+                    <CompanyAvatar logo={company.company_logo} name={company.company_name} size="2xl" />
+                  </div>
+                  <h3 className="font-bold text-gray-800 text-sm mb-2 truncate">{company.company_name || 'ບໍລິສັດ'}</h3>
+                  <div className="flex justify-center gap-3 text-xs">
+                    <div><div className="font-bold text-blue-600">{company.job_count}</div><div className="text-gray-400 text-[10px]">ວຽກ</div></div>
+                    <div className="w-px bg-gray-200"></div>
+                    <div><div className="font-bold text-green-600">{company.app_count}</div><div className="text-gray-400 text-[10px]">ສະໝັກ</div></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ===== Latest Jobs (ມີ cover + logo) ===== */}
+      <section className="max-w-7xl mx-auto px-4 pb-16">
+        <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 border border-gray-100">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl md:text-2xl font-bold text-gray-800">ວຽກລ່າສຸດ</h2>
+            <Link to="/jobs" className="text-sm text-blue-600 font-semibold hover:underline">ເບິ່ງທັງໝົດ →</Link>
+          </div>
           {loading ? (
             <div className="flex justify-center py-10"><div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>
           ) : latestJobs.length === 0 ? (
-            <p className="text-center text-gray-500">ຍັງບໍ່ມີວຽກໃນລະບົບ</p>
+            <p className="text-center text-gray-500 py-10">ຍັງບໍ່ມີວຽກໃນລະບົບ</p>
           ) : (
-            <div className="grid md:grid-cols-2 gap-4">
-              {latestJobs.map((job) => (
-                <Link key={job.id} to={`/jobs/${job.id}`} className="bg-white rounded-2xl p-5 border hover:shadow-xl transition-all group">
-                  <div className="flex items-start gap-4">
-                    <div className="w-14 h-14 bg-gradient-to-br from-blue-100 to-blue-50 rounded-xl flex items-center justify-center text-2xl shrink-0">{categoryIcons[job.category_name]}</div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-gray-800 group-hover:text-blue-700">{job.title}</h3>
-                      <p className="text-sm text-gray-500">{job.company_name}</p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">📍 {job.location}</span>
-                        <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">{job.job_type}</span>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {latestJobs.map((job) => {
+                const cover = job.company_cover ? getFullUrl(job.company_cover) : defaultCover;
+                return (
+                  <Link key={job.id} to={`/jobs/${job.id}`}
+                    className="bg-white rounded-2xl overflow-hidden border hover:shadow-2xl transition-all group hover:-translate-y-1">
+                    {/* ===== Cover Image ===== */}
+                    <div className="relative h-32 overflow-hidden bg-gradient-to-br from-blue-400 to-indigo-600">
+                      <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+                      {/* Logo ລອຍຢູ່ລຸ່ມ cover */}
+                      <div className="absolute -bottom-6 left-4">
+                        <CompanyAvatar logo={job.company_logo} name={job.company_name} size="xl" className="ring-4 ring-white" />
                       </div>
-                      <div className="mt-3 text-sm font-bold text-blue-700">{formatSalary(job.salary_min, job.salary_max, job.salary_type)}</div>
                     </div>
-                  </div>
-                </Link>
-              ))}
+
+                    {/* ===== Content ===== */}
+                    <div className="p-4 pt-8">
+                      <h3 className="font-bold text-gray-800 group-hover:text-blue-700 truncate">{job.title}</h3>
+                      <p className="text-xs text-gray-500 truncate mb-2">{job.company_name}</p>
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-1 rounded-full border border-blue-200">{job.location}</span>
+                        <span className="text-[10px] bg-green-50 text-green-700 px-2 py-1 rounded-full border border-green-200">{job.job_type}</span>
+                      </div>
+                      <div className="text-sm font-bold text-blue-700 border-t pt-2">
+                        {formatSalary(job.salary_min, job.salary_max, job.salary_type)}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
-          <div className="text-center mt-8">
-            <Link to="/jobs" className="inline-block bg-blue-700 text-white px-8 py-3 rounded-xl font-semibold hover:bg-blue-800">ເບິ່ງວຽກທັງໝົດ →</Link>
-          </div>
         </div>
       </section>
     </div>

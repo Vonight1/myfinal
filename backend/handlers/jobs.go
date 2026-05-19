@@ -18,6 +18,7 @@ func GetJobs(c *gin.Context) {
 	categoryID := c.Query("category_id")
 	location := c.Query("location")
 	jobType := c.Query("job_type")
+	newOnly := c.Query("new_only")
 
 	if page < 1 {
 		page = 1
@@ -34,6 +35,11 @@ func GetJobs(c *gin.Context) {
 		WHERE j.status = 'approved'`
 	args := []interface{}{}
 	argIndex := 1
+
+	// ===== ວຽກໃໝ່ (ພາຍໃນ 5 ມື້) =====
+	if newOnly == "true" {
+		baseQuery += ` AND j.created_at >= NOW() - INTERVAL '5 days'`
+	}
 
 	if search != "" {
 		baseQuery += ` AND (j.title ILIKE $` + strconv.Itoa(argIndex) + ` OR j.description ILIKE $` + strconv.Itoa(argIndex) + `)`
@@ -291,4 +297,85 @@ func GetCategories(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: categories})
+}
+
+// GetPublicStats - ສະຖິຕິສາທາລະນະ (ບໍ່ຕ້ອງ login)
+func GetPublicStats(c *gin.Context) {
+	var totalJobs, totalApprovedJobs, newJobsToday, totalUsers, totalCompanies, totalApplications int
+
+	config.DB.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&totalJobs)
+	config.DB.QueryRow("SELECT COUNT(*) FROM jobs WHERE status = 'approved'").Scan(&totalApprovedJobs)
+	config.DB.QueryRow("SELECT COUNT(*) FROM jobs WHERE status = 'approved' AND created_at >= NOW() - INTERVAL '5 days'").Scan(&newJobsToday)
+	config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'applicant'").Scan(&totalUsers)
+	config.DB.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'company'").Scan(&totalCompanies)
+	config.DB.QueryRow("SELECT COUNT(*) FROM applications").Scan(&totalApplications)
+
+	// ວຽກຕາມໝວດໝູ່
+	rows, err := config.DB.Query(
+		`SELECT c.name, COUNT(j.id) as job_count
+		 FROM categories c
+		 LEFT JOIN jobs j ON j.category_id = c.id AND j.status = 'approved'
+		 GROUP BY c.id, c.name
+		 ORDER BY job_count DESC`)
+
+	var jobsByCategory []gin.H
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var name string
+			var count int
+			rows.Scan(&name, &count)
+			jobsByCategory = append(jobsByCategory, gin.H{"name": name, "count": count})
+		}
+	}
+	if jobsByCategory == nil {
+		jobsByCategory = []gin.H{}
+	}
+
+	// Top 5 ບໍລິສັດທີ່ນິຍົມ (ມີວຽກຫຼາຍສຸດ)
+	topRows, topErr := config.DB.Query(
+		`SELECT u.id, u.company_name, u.company_logo,
+		 COUNT(j.id) as job_count,
+		 (SELECT COUNT(*) FROM applications a JOIN jobs jj ON a.job_id = jj.id WHERE jj.company_id = u.id) as app_count
+		 FROM users u
+		 JOIN jobs j ON j.company_id = u.id AND j.status = 'approved'
+		 WHERE u.role = 'company'
+		 GROUP BY u.id, u.company_name, u.company_logo
+		 ORDER BY job_count DESC, app_count DESC
+		 LIMIT 5`)
+
+	var topCompanies []gin.H
+	if topErr == nil {
+		defer topRows.Close()
+		for topRows.Next() {
+			var id, jobCount, appCount int
+			var companyName *string
+			var companyLogo *string
+			topRows.Scan(&id, &companyName, &companyLogo, &jobCount, &appCount)
+			topCompanies = append(topCompanies, gin.H{
+				"id":           id,
+				"company_name": companyName,
+				"company_logo": companyLogo,
+				"job_count":    jobCount,
+				"app_count":    appCount,
+			})
+		}
+	}
+	if topCompanies == nil {
+		topCompanies = []gin.H{}
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{
+		Success: true,
+		Data: gin.H{
+			"total_jobs":         totalJobs,
+			"approved_jobs":      totalApprovedJobs,
+			"new_jobs_today":     newJobsToday,
+			"total_users":        totalUsers,
+			"total_companies":    totalCompanies,
+			"total_applications": totalApplications,
+			"jobs_by_category":   jobsByCategory,
+			"top_companies":      topCompanies,
+		},
+	})
 }

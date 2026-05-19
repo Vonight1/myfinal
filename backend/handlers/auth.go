@@ -4,8 +4,11 @@ import (
 	"backend/config"
 	"backend/middleware"
 	"backend/models"
+	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -131,12 +134,14 @@ func GetProfile(c *gin.Context) {
 	var user models.User
 	err := config.DB.QueryRow(
 		`SELECT id, name, email, phone, profile_image, role, company_name, 
-		 company_description, company_address, company_logo, resume_file, 
+		 company_description, company_address, company_logo, company_cover,
+		 company_industry, company_website, resume_file, 
 		 skills, education, is_active, created_at
 		 FROM users WHERE id = $1`, userID,
 	).Scan(&user.ID, &user.Name, &user.Email, &user.Phone, &user.ProfileImage,
 		&user.Role, &user.CompanyName, &user.CompanyDescription, &user.CompanyAddress,
-		&user.CompanyLogo, &user.ResumeFile, &user.Skills, &user.Education,
+		&user.CompanyLogo, &user.CompanyCover, &user.CompanyIndustry, &user.CompanyWebsite,
+		&user.ResumeFile, &user.Skills, &user.Education,
 		&user.IsActive, &user.CreatedAt)
 
 	if err != nil {
@@ -157,6 +162,8 @@ func UpdateProfile(c *gin.Context) {
 		CompanyName        string `json:"company_name"`
 		CompanyDescription string `json:"company_description"`
 		CompanyAddress     string `json:"company_address"`
+		CompanyIndustry    string `json:"company_industry"`
+		CompanyWebsite     string `json:"company_website"`
 		Skills             string `json:"skills"`
 		Education          string `json:"education"`
 	}
@@ -168,9 +175,11 @@ func UpdateProfile(c *gin.Context) {
 
 	_, err := config.DB.Exec(
 		`UPDATE users SET name=$1, phone=$2, company_name=$3, company_description=$4, 
-		 company_address=$5, skills=$6, education=$7, updated_at=NOW() WHERE id=$8`,
+		 company_address=$5, company_industry=$6, company_website=$7,
+		 skills=$8, education=$9, updated_at=NOW() WHERE id=$10`,
 		req.Name, nullIfEmpty(req.Phone), nullIfEmpty(req.CompanyName),
 		nullIfEmpty(req.CompanyDescription), nullIfEmpty(req.CompanyAddress),
+		nullIfEmpty(req.CompanyIndustry), nullIfEmpty(req.CompanyWebsite),
 		nullIfEmpty(req.Skills), nullIfEmpty(req.Education), userID,
 	)
 
@@ -244,4 +253,105 @@ func nullIfEmpty(s string) interface{} {
 		return nil
 	}
 	return s
+}
+
+// UploadCompanyCover - ອັບໂຫຼດຮູບປະກອບ/cover image
+func UploadCompanyCover(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+
+	file, header, err := c.Request.FormFile("cover")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ກະລຸນາເລືອກໄຟລ໌"})
+		return
+	}
+	defer file.Close()
+
+	if header.Size > 10*1024*1024 {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ໄຟລ໌ໃຫຍ່ເກີນໄປ (ສູງສຸດ 10MB)"})
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	allowedExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+	if !allowedExts[ext] {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ຮອງຮັບສະເພາະ JPG, PNG, WEBP"})
+		return
+	}
+
+	uploadDir := "./uploads/covers"
+	os.MkdirAll(uploadDir, os.ModePerm)
+
+	filename := fmt.Sprintf("cover_%v_%d%s", userID, time.Now().UnixNano(), ext)
+	savePath := filepath.Join(uploadDir, filename)
+
+	if err := c.SaveUploadedFile(header, savePath); err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບັນທຶກໄຟລ໌ບໍ່ໄດ້"})
+		return
+	}
+
+	coverURL := "/uploads/covers/" + filename
+	_, err = config.DB.Exec(`UPDATE users SET company_cover=$1 WHERE id=$2`, coverURL, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບໍ່ສາມາດອັບເດດໄດ້"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{
+		Success: true,
+		Message: "ອັບໂຫຼດສຳເລັດ",
+		Data:    gin.H{"company_cover": coverURL},
+	})
+}
+func UploadCompanyLogo(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+
+	file, header, err := c.Request.FormFile("logo")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ກະລຸນາເລືອກໄຟລ໌"})
+		return
+	}
+	defer file.Close()
+
+	// ກວດສອບຂະໜາດ (5MB)
+	if header.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ໄຟລ໌ໃຫຍ່ເກີນໄປ (ສູງສຸດ 5MB)"})
+		return
+	}
+
+	// ກວດສອບປະເພດ (ສະເພາະຮູບ)
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	allowedExts := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+	if !allowedExts[ext] {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ຮອງຮັບສະເພາະ JPG, PNG, WEBP"})
+		return
+	}
+
+	// ສ້າງ folder
+	uploadDir := "./uploads/logos"
+	os.MkdirAll(uploadDir, os.ModePerm)
+
+	// ສ້າງຊື່ໄຟລ໌ unique
+	filename := fmt.Sprintf("logo_%v_%d%s", userID, time.Now().UnixNano(), ext)
+	savePath := filepath.Join(uploadDir, filename)
+
+	if err := c.SaveUploadedFile(header, savePath); err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບັນທຶກໄຟລ໌ບໍ່ໄດ້"})
+		return
+	}
+
+	// URL
+	logoURL := "/uploads/logos/" + filename
+
+	// ອັບເດດໃນ database
+	_, err = config.DB.Exec(`UPDATE users SET company_logo=$1 WHERE id=$2`, logoURL, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບໍ່ສາມາດອັບເດດໄດ້"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{
+		Success: true,
+		Message: "ອັບໂຫຼດໂລໂກສຳເລັດ",
+		Data:    gin.H{"company_logo": logoURL},
+	})
 }

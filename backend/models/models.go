@@ -15,6 +15,9 @@ type User struct {
 	CompanyDescription *string   `json:"company_description"`
 	CompanyAddress     *string   `json:"company_address"`
 	CompanyLogo        *string   `json:"company_logo"`
+	CompanyCover       *string   `json:"company_cover"`
+	CompanyIndustry    *string   `json:"company_industry"`
+	CompanyWebsite     *string   `json:"company_website"`
 	ResumeFile         *string   `json:"resume_file"`
 	Skills             *string   `json:"skills"`
 	Education          *string   `json:"education"`
@@ -81,6 +84,7 @@ type Job struct {
 	// Joined fields
 	CompanyName    *string `json:"company_name,omitempty"`
 	CompanyLogo    *string `json:"company_logo,omitempty"`
+	CompanyCover   *string `json:"company_cover,omitempty"`
 	CategoryName   *string `json:"category_name,omitempty"`
 	ApplicantCount *int    `json:"applicant_count,omitempty"`
 }

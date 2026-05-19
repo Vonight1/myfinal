@@ -25,6 +25,9 @@ func main() {
 	// Setup Gin
 	r := gin.Default()
 
+	// ເພີ່ມຂະໜາດ upload ສູງສຸດ 50MB
+	r.MaxMultipartMemory = 50 << 20
+
 	// CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3001"},
@@ -51,6 +54,7 @@ func main() {
 		api.GET("/jobs/:id", handlers.GetJobByID)
 		api.GET("/jobs/:id/reviews", handlers.GetJobReviews)
 		api.GET("/categories", handlers.GetCategories)
+		api.GET("/stats", handlers.GetPublicStats)
 
 		// === Auth Required ===
 		auth := api.Group("/")
@@ -94,7 +98,37 @@ func main() {
 			admin.PUT("/jobs/:id/verify", handlers.VerifyJob)
 			admin.GET("/reviews", handlers.GetAllReviews)
 			admin.DELETE("/reviews/:id", handlers.DeleteReview)
+
+			// Category Management
+			admin.POST("/categories", handlers.CreateCategory)
+			admin.PUT("/categories/:id", handlers.UpdateCategory)
+			admin.DELETE("/categories/:id", handlers.DeleteCategory)
+
+			// Notifications
+			admin.POST("/notifications", handlers.CreateNotification)
+			admin.GET("/notifications", handlers.GetAllNotifications)
+
+			// Complaints
+			admin.GET("/complaints", handlers.GetAllComplaints)
+			admin.PUT("/complaints/:id", handlers.UpdateComplaintStatus)
+
+			// Settings
+			admin.GET("/settings", handlers.GetSettings)
+			admin.PUT("/settings/:id", handlers.UpdateSetting)
+
+			// Login Logs
+			admin.GET("/login-logs", handlers.GetLoginLogs)
+
+			// Admin Profile
+			admin.PUT("/change-password", handlers.ChangePassword)
 		}
+
+		// === User Notifications & Complaints (ທຸກ user) ===
+		auth.GET("/notifications", handlers.GetMyNotifications)
+		auth.PUT("/notifications/:id/read", handlers.MarkNotificationRead)
+		auth.POST("/complaints", handlers.CreateComplaint)
+		auth.POST("/upload-logo", handlers.UploadCompanyLogo)
+		auth.POST("/upload-cover", handlers.UploadCompanyCover)
 	}
 
 	// Start server
