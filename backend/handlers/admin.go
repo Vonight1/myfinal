@@ -4,6 +4,7 @@ import (
 	"backend/config"
 	"backend/models"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +27,7 @@ func GetDashboardStats(c *gin.Context) {
 func GetAllUsers(c *gin.Context) {
 	roleFilter := c.Query("role")
 
-	query := `SELECT id, name, email, phone, role, company_name, is_active, is_banned, created_at 
+	query := `SELECT id, name, email, phone, role, company_name, is_active, is_banned, verified_company, created_at
 			  FROM users WHERE role != 'admin'`
 	args := []interface{}{}
 
@@ -48,14 +49,16 @@ func GetAllUsers(c *gin.Context) {
 		var id int
 		var name, email, role string
 		var phone, companyName *string
-		var isActive, isBanned bool
+		var isActive, isBanned, verifiedCompany bool
 		var createdAt interface{}
 
-		rows.Scan(&id, &name, &email, &phone, &role, &companyName, &isActive, &isBanned, &createdAt)
+		rows.Scan(&id, &name, &email, &phone, &role, &companyName, &isActive, &isBanned, &verifiedCompany, &createdAt)
 		users = append(users, gin.H{
 			"id": id, "name": name, "email": email, "phone": phone,
 			"role": role, "company_name": companyName,
-			"is_active": isActive, "is_banned": isBanned, "created_at": createdAt,
+			"is_active": isActive, "is_banned": isBanned,
+			"verified_company": verifiedCompany,
+			"created_at": createdAt,
 		})
 	}
 
@@ -63,6 +66,47 @@ func GetAllUsers(c *gin.Context) {
 		users = []gin.H{}
 	}
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: users})
+}
+
+// VerifyCompany - ຢືນຢັນບໍລິສັດ (toggle verified_company badge)
+func VerifyCompany(c *gin.Context) {
+	userID := c.Param("id")
+	var req struct {
+		Verify bool `json:"verify"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ຂໍ້ມູນບໍ່ຖືກຕ້ອງ"})
+		return
+	}
+
+	// ກວດເບິ່ງວ່າເປັນບໍລິສັດແທ້
+	var role string
+	err := config.DB.QueryRow("SELECT role FROM users WHERE id=$1", userID).Scan(&role)
+	if err != nil || role != "company" {
+		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ສະເພາະ user ປະເພດ company ເທົ່ານັ້ນ"})
+		return
+	}
+
+	_, err = config.DB.Exec("UPDATE users SET verified_company=$1, updated_at=NOW() WHERE id=$2", req.Verify, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບໍ່ສຳເລັດ"})
+		return
+	}
+
+	msg := "ຢືນຢັນບໍລິສັດສຳເລັດ"
+	if !req.Verify {
+		msg = "ຍົກເລີກການຢືນຢັນແລ້ວ"
+	}
+
+	// ສ້າງ notification ໃຫ້ບໍລິສັດ
+	if uid, err := strconv.Atoi(userID); err == nil {
+		if req.Verify {
+			CreateNotificationFor(uid, "ບໍລິສັດໄດ້ຮັບການຢືນຢັນ",
+				"ບໍລິສັດຂອງທ່ານໄດ້ຮັບ verified badge ແລ້ວ", "success")
+		}
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: msg})
 }
 
 // BanUser - ລະງັບຜູ້ໃຊ້
@@ -155,6 +199,20 @@ func VerifyJob(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ເກີດຂໍ້ຜິດພາດ"})
 		return
+	}
+
+	// ===== ສ້າງ Notification ໃຫ້ບໍລິສັດ =====
+	var companyID int
+	var jobTitle string
+	config.DB.QueryRow("SELECT company_id, title FROM jobs WHERE id=$1", jobID).Scan(&companyID, &jobTitle)
+	if companyID > 0 {
+		if req.Status == "approved" {
+			CreateNotificationFor(companyID, "ວຽກໄດ້ຮັບການອະນຸມັດ",
+				"ວຽກ \""+jobTitle+"\" ຂອງທ່ານໄດ້ຮັບການອະນຸມັດແລ້ວ", "success")
+		} else {
+			CreateNotificationFor(companyID, "ວຽກຖືກປະຕິເສດ",
+				"ວຽກ \""+jobTitle+"\" ຂອງທ່ານຖືກປະຕິເສດ ກະລຸນາກວດສອບ", "warning")
+		}
 	}
 
 	msg := "ອະນຸມັດວຽກສຳເລັດ"

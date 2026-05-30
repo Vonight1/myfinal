@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { jobsAPI } from '../lib/api';
 import { formatSalary, getFullUrl } from '../lib/utils';
 import CompanyAvatar from '../components/CompanyAvatar';
+import SaveJobButton from '../components/SaveJobButton';
+import { JobGridSkeleton } from '../components/Skeleton';
 
 const categoryImages = {
   'ການເງິນ': 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600&q=80',
@@ -42,7 +44,7 @@ export default function HomePage() {
         if (jobRes.data.success) setLatestJobs(jobRes.data.data || []);
         if (statsRes.data.success) setStats(statsRes.data.data);
       })
-      .catch(console.error)
+      .catch((err) => { if (import.meta.env.DEV) console.error(err); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -169,43 +171,98 @@ export default function HomePage() {
       <section className="max-w-7xl mx-auto px-4 pb-16">
         <div className="bg-white rounded-3xl shadow-xl p-6 md:p-8 border border-gray-100">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl md:text-2xl font-bold text-gray-800">ວຽກລ່າສຸດ</h2>
-            <Link to="/jobs" className="text-sm text-blue-600 font-semibold hover:underline">ເບິ່ງທັງໝົດ →</Link>
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold text-gray-800">ວຽກລ່າສຸດ</h2>
+              <p className="text-sm text-gray-500 mt-1">ໂອກາດໃໝ່ໆທີ່ກຳລັງເປີດຮັບສະໝັກ</p>
+            </div>
+            <Link to="/jobs" className="text-sm text-blue-600 font-semibold hover:underline flex items-center gap-1 shrink-0">
+              ເບິ່ງທັງໝົດ
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </Link>
           </div>
           {loading ? (
-            <div className="flex justify-center py-10"><div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>
+            <JobGridSkeleton count={6} />
           ) : latestJobs.length === 0 ? (
             <p className="text-center text-gray-500 py-10">ຍັງບໍ່ມີວຽກໃນລະບົບ</p>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {latestJobs.map((job) => {
                 const cover = job.company_cover ? getFullUrl(job.company_cover) : defaultCover;
+                const isNewJob = job.created_at && ((new Date() - new Date(job.created_at)) / (1000 * 60 * 60 * 24)) <= 5;
                 return (
-                  <Link key={job.id} to={`/jobs/${job.id}`}
-                    className="bg-white rounded-2xl overflow-hidden border hover:shadow-2xl transition-all group hover:-translate-y-1">
+                  <div key={job.id}
+                    className="bg-white rounded-2xl overflow-hidden border border-gray-200 hover:shadow-xl transition-all duration-300 group flex flex-col">
                     {/* ===== Cover Image ===== */}
-                    <div className="relative h-32 overflow-hidden bg-gradient-to-br from-blue-400 to-indigo-600">
-                      <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
-                      {/* Logo ລອຍຢູ່ລຸ່ມ cover */}
-                      <div className="absolute -bottom-6 left-4">
-                        <CompanyAvatar logo={job.company_logo} name={job.company_name} size="xl" className="ring-4 ring-white" />
+                    <div className="relative h-40 overflow-hidden bg-gradient-to-br from-blue-400 to-indigo-600">
+                      <img
+                        src={cover}
+                        alt={job.company_name}
+                        loading="lazy"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        onError={(e) => { e.target.src = defaultCover; }}
+                      />
+                      {isNewJob && (
+                        <div className="absolute top-3 left-3 bg-red-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg">
+                          NEW
+                        </div>
+                      )}
+                      <div className="absolute top-3 right-3">
+                        <SaveJobButton jobId={job.id} />
+                      </div>
+                    </div>
+
+                    {/* ===== Logo Card + Stats Row ===== */}
+                    <div className="relative px-5 -mt-8 flex items-end justify-between gap-3">
+                      {/* Logo ໃນ card ສີຂາວ */}
+                      <div className="w-16 h-16 bg-white rounded-xl shadow-md border border-gray-100 p-2 shrink-0">
+                        <CompanyAvatar
+                          logo={job.company_logo}
+                          name={job.company_name}
+                          size="sm"
+                          className="!w-full !h-full !rounded-lg shadow-none"
+                        />
+                      </div>
+                      {/* Stats: applicants + job_type badge */}
+                      <div className="flex items-center gap-3 pb-1">
+                        <span className="text-xs text-gray-500">
+                          <span className="font-semibold text-gray-700">{job.applicant_count || 0}</span> ສະໝັກແລ້ວ
+                        </span>
+                        <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2.5 py-1 rounded-full border border-blue-100">
+                          {job.job_type}
+                        </span>
                       </div>
                     </div>
 
                     {/* ===== Content ===== */}
-                    <div className="p-4 pt-8">
-                      <h3 className="font-bold text-gray-800 group-hover:text-blue-700 truncate">{job.title}</h3>
-                      <p className="text-xs text-gray-500 truncate mb-2">{job.company_name}</p>
-                      <div className="flex flex-wrap gap-1.5 mb-3">
-                        <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-1 rounded-full border border-blue-200">{job.location}</span>
-                        <span className="text-[10px] bg-green-50 text-green-700 px-2 py-1 rounded-full border border-green-200">{job.job_type}</span>
+                    <div className="p-5 pt-3 flex-1 flex flex-col">
+                      <h3 className="font-bold text-gray-800 text-base line-clamp-1 group-hover:text-blue-700 transition-colors">
+                        {job.title}
+                      </h3>
+                      <Link
+                        to={`/users/${job.company_id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-sm text-gray-500 mt-0.5 truncate hover:text-blue-600 hover:underline block w-fit max-w-full"
+                      >
+                        {job.company_name || 'ບໍລິສັດ'}
+                      </Link>
+
+                      <div className="flex items-center gap-1.5 text-sm text-gray-500 mt-2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                        <span className="truncate">{job.location}</span>
                       </div>
-                      <div className="text-sm font-bold text-blue-700 border-t pt-2">
+
+                      {/* Salary */}
+                      <div className="mt-3 text-sm font-bold text-blue-700">
                         {formatSalary(job.salary_min, job.salary_max, job.salary_type)}
                       </div>
+
+                      {/* Button */}
+                      <Link to={`/jobs/${job.id}`}
+                        className="mt-4 block w-full text-center py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all">
+                        ເບິ່ງລາຍລະອຽດ →
+                      </Link>
                     </div>
-                  </Link>
+                  </div>
                 );
               })}
             </div>

@@ -33,7 +33,12 @@ export function AuthProvider({ children }) {
     const res = await authAPI.login({ email, password });
     if (res.data.success) {
       const { token, user: userData } = res.data.data;
-      Cookies.set('token', token, { expires: 1 });
+      // ປອດໄພຫຼາຍຂຶ້ນ: SameSite=strict ປ້ອງກັນ CSRF, secure ໃນ HTTPS
+      Cookies.set('token', token, {
+        expires: 1,
+        sameSite: 'strict',
+        secure: window.location.protocol === 'https:',
+      });
       setUser(userData);
       return { success: true, user: userData };
     }

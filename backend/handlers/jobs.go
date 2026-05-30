@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"backend/config"
+	"backend/middleware"
 	"backend/models"
 	"math"
 	"net/http"
@@ -19,6 +20,8 @@ func GetJobs(c *gin.Context) {
 	location := c.Query("location")
 	jobType := c.Query("job_type")
 	newOnly := c.Query("new_only")
+	salaryMin := c.Query("salary_min")
+	salaryMax := c.Query("salary_max")
 
 	if page < 1 {
 		page = 1
@@ -61,6 +64,20 @@ func GetJobs(c *gin.Context) {
 		args = append(args, jobType)
 		argIndex++
 	}
+	if salaryMin != "" {
+		if v, err := strconv.ParseFloat(salaryMin, 64); err == nil && v > 0 {
+			baseQuery += ` AND (j.salary_max IS NULL OR j.salary_max >= $` + strconv.Itoa(argIndex) + `)`
+			args = append(args, v)
+			argIndex++
+		}
+	}
+	if salaryMax != "" {
+		if v, err := strconv.ParseFloat(salaryMax, 64); err == nil && v > 0 {
+			baseQuery += ` AND (j.salary_min IS NULL OR j.salary_min <= $` + strconv.Itoa(argIndex) + `)`
+			args = append(args, v)
+			argIndex++
+		}
+	}
 
 	// Count total
 	var total int
@@ -72,10 +89,10 @@ func GetJobs(c *gin.Context) {
 	}
 
 	// Get data
-	selectQuery := `SELECT j.id, j.company_id, j.category_id, j.title, j.description, 
-		j.requirements, j.salary_min, j.salary_max, j.salary_type, j.location, 
+	selectQuery := `SELECT j.id, j.company_id, j.category_id, j.title, j.description,
+		j.requirements, j.salary_min, j.salary_max, j.salary_type, j.location,
 		j.job_type, j.work_days, j.work_hours, j.positions, j.status, j.deadline,
-		j.views_count, j.created_at, u.company_name, u.company_logo, c.name as category_name,
+		j.views_count, j.created_at, u.company_name, u.company_logo, u.company_cover, c.name as category_name,
 		(SELECT COUNT(*) FROM applications WHERE job_id = j.id) as applicant_count ` +
 		baseQuery + ` ORDER BY j.created_at DESC LIMIT $` + strconv.Itoa(argIndex) + ` OFFSET $` + strconv.Itoa(argIndex+1)
 	args = append(args, perPage, offset)
@@ -93,7 +110,7 @@ func GetJobs(c *gin.Context) {
 		err := rows.Scan(&job.ID, &job.CompanyID, &job.CategoryID, &job.Title, &job.Description,
 			&job.Requirements, &job.SalaryMin, &job.SalaryMax, &job.SalaryType, &job.Location,
 			&job.JobType, &job.WorkDays, &job.WorkHours, &job.Positions, &job.Status, &job.Deadline,
-			&job.ViewsCount, &job.CreatedAt, &job.CompanyName, &job.CompanyLogo, &job.CategoryName,
+			&job.ViewsCount, &job.CreatedAt, &job.CompanyName, &job.CompanyLogo, &job.CompanyCover, &job.CategoryName,
 			&job.ApplicantCount)
 		if err != nil {
 			continue
@@ -126,10 +143,10 @@ func GetJobByID(c *gin.Context) {
 
 	var job models.Job
 	err := config.DB.QueryRow(
-		`SELECT j.id, j.company_id, j.category_id, j.title, j.description, 
+		`SELECT j.id, j.company_id, j.category_id, j.title, j.description,
 		 j.requirements, j.salary_min, j.salary_max, j.salary_type, j.location,
 		 j.job_type, j.work_days, j.work_hours, j.positions, j.status, j.deadline,
-		 j.views_count, j.created_at, u.company_name, u.company_logo, c.name,
+		 j.views_count, j.created_at, u.company_name, u.company_logo, u.company_cover, c.name,
 		 (SELECT COUNT(*) FROM applications WHERE job_id = j.id)
 		 FROM jobs j
 		 LEFT JOIN users u ON j.company_id = u.id
@@ -138,7 +155,7 @@ func GetJobByID(c *gin.Context) {
 	).Scan(&job.ID, &job.CompanyID, &job.CategoryID, &job.Title, &job.Description,
 		&job.Requirements, &job.SalaryMin, &job.SalaryMax, &job.SalaryType, &job.Location,
 		&job.JobType, &job.WorkDays, &job.WorkHours, &job.Positions, &job.Status, &job.Deadline,
-		&job.ViewsCount, &job.CreatedAt, &job.CompanyName, &job.CompanyLogo, &job.CategoryName,
+		&job.ViewsCount, &job.CreatedAt, &job.CompanyName, &job.CompanyLogo, &job.CompanyCover, &job.CategoryName,
 		&job.ApplicantCount)
 
 	if err != nil {
@@ -168,6 +185,14 @@ func CreateJob(c *gin.Context) {
 	if req.Positions == 0 {
 		req.Positions = 1
 	}
+
+	// ===== XSS Sanitization =====
+	req.Title = middleware.SanitizeText(req.Title)
+	req.Description = middleware.SanitizeRichText(req.Description)
+	req.Requirements = middleware.SanitizeRichText(req.Requirements)
+	req.Location = middleware.SanitizeText(req.Location)
+	req.WorkDays = middleware.SanitizeText(req.WorkDays)
+	req.WorkHours = middleware.SanitizeText(req.WorkHours)
 
 	var jobID int
 	err := config.DB.QueryRow(
@@ -227,6 +252,33 @@ func UpdateJob(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "ແກ້ໄຂສຳເລັດ"})
+}
+
+// DeleteJob - ລົບປະກາດວຽກ (Company only - ສະເພາະຂອງຕົນ)
+func DeleteJob(c *gin.Context) {
+	jobID := c.Param("id")
+	companyID, _ := c.Get("user_id")
+
+	// ກວດເບິ່ງວ່າເປັນເຈົ້າຂອງບໍ່
+	var ownerID int
+	err := config.DB.QueryRow("SELECT company_id FROM jobs WHERE id=$1", jobID).Scan(&ownerID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Message: "ບໍ່ພົບວຽກນີ້"})
+		return
+	}
+	if ownerID != companyID.(int) {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Message: "ບໍ່ມີສິດລົບວຽກນີ້"})
+		return
+	}
+
+	// ລົບວຽກ (CASCADE ຈະລົບ applications, reviews, saved_jobs ໃຫ້)
+	_, err = config.DB.Exec("DELETE FROM jobs WHERE id=$1", jobID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບໍ່ສາມາດລົບໄດ້"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "ລົບວຽກສຳເລັດ"})
 }
 
 // GetMyJobs - ວຽກທີ່ບໍລິສັດປະກາດ

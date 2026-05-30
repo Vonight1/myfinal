@@ -27,12 +27,37 @@ api.interceptors.response.use(
   }
 );
 
+// ====== Users (Public Profile) ======
+export const usersAPI = {
+  getById: (id) => api.get(`/users/${id}`),
+};
+
+// ====== Companies ======
+export const companiesAPI = {
+  getAll: (params) => api.get('/companies', { params }),
+  getById: (id) => api.get(`/companies/${id}`),
+  toggleFollow: (id) => api.post(`/companies/${id}/follow`),
+  checkFollowing: (id) => api.get(`/companies/${id}/follow/check`),
+  getFollowerCount: (id) => api.get(`/companies/${id}/followers/count`),
+};
+
+// ====== Saved Jobs ======
+export const savedJobsAPI = {
+  getMine: () => api.get('/saved-jobs'),
+  toggle: (jobId) => api.post(`/saved-jobs/${jobId}/toggle`),
+  check: (jobId) => api.get(`/saved-jobs/${jobId}/check`),
+};
+
 // ====== Auth ======
 export const authAPI = {
   register: (data) => api.post('/register', data),
   login: (data) => api.post('/login', data),
+  forgotPassword: (email) => api.post('/forgot-password', { email }),
+  validateResetToken: (token) => api.get(`/reset-password/${token}/validate`),
+  resetPassword: (token, newPassword) => api.post('/reset-password', { token, new_password: newPassword }),
   getProfile: () => api.get('/profile'),
   updateProfile: (data) => api.put('/profile', data),
+  changePassword: (oldPassword, newPassword) => api.put('/change-password', { old_password: oldPassword, new_password: newPassword }),
   uploadLogo: (formData) => api.post('/upload-logo', formData, {
     headers: { 'Content-Type': undefined },
   }),
@@ -49,6 +74,7 @@ export const jobsAPI = {
   getStats: () => api.get('/stats'),
   createJob: (data) => api.post('/company/jobs', data),
   updateJob: (id, data) => api.put(`/company/jobs/${id}`, data),
+  deleteJob: (id) => api.delete(`/company/jobs/${id}`),
   getMyJobs: () => api.get('/company/my-jobs'),
 };
 
@@ -58,6 +84,7 @@ export const applicationsAPI = {
     headers: { 'Content-Type': undefined },
   }),
   getMyApplications: () => api.get('/applicant/my-applications'),
+  cancelApplication: (appId) => api.delete(`/applicant/applications/${appId}`),
   getJobApplicants: (jobId) => api.get(`/company/jobs/${jobId}/applicants`),
   updateStatus: (appId, status) => api.put(`/company/applications/${appId}/status`, { status }),
 };
@@ -73,6 +100,7 @@ export const adminAPI = {
   getDashboard: () => api.get('/admin/dashboard'),
   getUsers: (role) => api.get('/admin/users', { params: { role } }),
   banUser: (id, ban) => api.put(`/admin/users/${id}/ban`, { ban }),
+  verifyCompany: (id, verify) => api.put(`/admin/users/${id}/verify`, { verify }),
   getAllJobs: (status) => api.get('/admin/jobs', { params: { status } }),
   verifyJob: (id, status) => api.put(`/admin/jobs/${id}/verify`, { status }),
   getReviews: () => api.get('/admin/reviews'),
@@ -105,7 +133,9 @@ export const adminAPI = {
 // User notifications
 export const notificationsAPI = {
   getMine: () => api.get('/notifications'),
+  unreadCount: () => api.get('/notifications/unread-count'),
   markRead: (id) => api.put(`/notifications/${id}/read`),
+  markAllRead: () => api.put('/notifications/read-all'),
   createComplaint: (data) => api.post('/complaints', data),
 };
 

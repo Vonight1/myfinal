@@ -93,6 +93,21 @@ func ApplyJob(c *gin.Context) {
 		return
 	}
 
+	// ===== ສ້າງ Notification ໃຫ້ບໍລິສັດ =====
+	var companyID int
+	var jobTitle, applicantName string
+	config.DB.QueryRow(
+		`SELECT j.company_id, j.title, u.name FROM jobs j, users u WHERE j.id = $1 AND u.id = $2`,
+		jobID, applicantID,
+	).Scan(&companyID, &jobTitle, &applicantName)
+	if companyID > 0 {
+		CreateNotificationFor(companyID,
+			"ມີຜູ້ສະໝັກວຽກໃໝ່",
+			applicantName+" ສະໝັກວຽກ \""+jobTitle+"\" ຂອງທ່ານ",
+			"success",
+		)
+	}
+
 	c.JSON(http.StatusCreated, models.APIResponse{
 		Success: true,
 		Message: "ສະໝັກວຽກສຳເລັດ",
@@ -100,12 +115,48 @@ func ApplyJob(c *gin.Context) {
 	})
 }
 
+// CancelApplication - Applicant ຍົກເລີກການສະໝັກຂອງຕົນ (ສະເພາະ status='pending')
+func CancelApplication(c *gin.Context) {
+	appID := c.Param("id")
+	applicantID, _ := c.Get("user_id")
+
+	// ກວດສອບເຈົ້າຂອງ + status
+	var ownerID int
+	var status string
+	err := config.DB.QueryRow(
+		"SELECT applicant_id, status FROM applications WHERE id=$1", appID,
+	).Scan(&ownerID, &status)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Message: "ບໍ່ພົບການສະໝັກ"})
+		return
+	}
+	if ownerID != applicantID.(int) {
+		c.JSON(http.StatusForbidden, models.APIResponse{Success: false, Message: "ບໍ່ມີສິດ"})
+		return
+	}
+	if status != "pending" {
+		c.JSON(http.StatusBadRequest, models.APIResponse{
+			Success: false,
+			Message: "ບໍ່ສາມາດຍົກເລີກໄດ້ (ບໍລິສັດໄດ້ພິຈາລະນາແລ້ວ)",
+		})
+		return
+	}
+
+	_, err = config.DB.Exec("DELETE FROM applications WHERE id=$1", appID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບໍ່ສາມາດຍົກເລີກໄດ້"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "ຍົກເລີກການສະໝັກສຳເລັດ"})
+}
+
 // GetMyApplications - ວຽກທີ່ຂ້ອຍສະໝັກ
 func GetMyApplications(c *gin.Context) {
 	applicantID, _ := c.Get("user_id")
 
 	rows, err := config.DB.Query(
-		`SELECT a.id, a.job_id, a.status, a.applied_at, j.title, u.company_name, j.location
+		`SELECT a.id, a.job_id, a.status, a.applied_at, j.title, j.company_id, u.company_name, j.location
 		 FROM applications a
 		 JOIN jobs j ON a.job_id = j.id
 		 LEFT JOIN users u ON j.company_id = u.id
@@ -119,16 +170,16 @@ func GetMyApplications(c *gin.Context) {
 
 	var apps []gin.H
 	for rows.Next() {
-		var id, jobID int
+		var id, jobID, companyID int
 		var status string
 		var appliedAt interface{}
 		var jobTitle string
 		var companyName *string
 		var location string
-		rows.Scan(&id, &jobID, &status, &appliedAt, &jobTitle, &companyName, &location)
+		rows.Scan(&id, &jobID, &status, &appliedAt, &jobTitle, &companyID, &companyName, &location)
 		apps = append(apps, gin.H{
 			"id": id, "job_id": jobID, "status": status, "applied_at": appliedAt,
-			"job_title": jobTitle, "company_name": companyName, "location": location,
+			"job_title": jobTitle, "company_id": companyID, "company_name": companyName, "location": location,
 		})
 	}
 
@@ -216,6 +267,37 @@ func UpdateApplicationStatus(c *gin.Context) {
 	if rows == 0 {
 		c.JSON(http.StatusNotFound, models.APIResponse{Success: false, Message: "ບໍ່ພົບ ຫຼື ບໍ່ມີສິດ"})
 		return
+	}
+
+	// ===== ສ້າງ Notification ໃຫ້ applicant =====
+	var applicantID int
+	var jobTitle string
+	config.DB.QueryRow(
+		`SELECT a.applicant_id, j.title FROM applications a JOIN jobs j ON a.job_id = j.id WHERE a.id = $1`,
+		appID,
+	).Scan(&applicantID, &jobTitle)
+	if applicantID > 0 {
+		statusMsg := map[string]string{
+			"accepted": "ໄດ້ຮັບການອະນຸມັດ ✅",
+			"rejected": "ບໍ່ຜ່ານການພິຈາລະນາ",
+			"reviewed": "ກຳລັງຖືກພິຈາລະນາ",
+			"pending":  "ກັບໄປສະຖານະລໍຖ້າ",
+		}
+		notifType := "info"
+		if req.Status == "accepted" {
+			notifType = "success"
+		} else if req.Status == "rejected" {
+			notifType = "warning"
+		}
+		msg := statusMsg[req.Status]
+		if msg == "" {
+			msg = req.Status
+		}
+		CreateNotificationFor(applicantID,
+			"ສະຖານະການສະໝັກປ່ຽນແປງ",
+			"ການສະໝັກວຽກ \""+jobTitle+"\" ຂອງທ່ານ "+msg,
+			notifType,
+		)
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "ອັບເດດສະຖານະສຳເລັດ"})

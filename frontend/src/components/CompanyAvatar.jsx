@@ -22,6 +22,7 @@ export default function CompanyAvatar({ logo, name, size = 'md', className = '' 
         <img
           src={getFullUrl(logo)}
           alt={name || 'Logo'}
+          loading="lazy"
           className="w-full h-full object-cover"
           onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold">${name?.[0] || 'C'}</div>`; }}
         />

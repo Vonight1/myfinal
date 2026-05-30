@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"backend/config"
+	"backend/middleware"
 	"backend/models"
 	"net/http"
 
@@ -23,9 +24,12 @@ func CreateReview(c *gin.Context) {
 		return
 	}
 
+	// XSS Sanitize comment
+	cleanComment := middleware.SanitizeText(req.Comment)
+
 	_, err := config.DB.Exec(
 		"INSERT INTO reviews (job_id, user_id, rating, comment) VALUES ($1, $2, $3, $4)",
-		jobID, userID, req.Rating, nullIfEmpty(req.Comment),
+		jobID, userID, req.Rating, nullIfEmpty(cleanComment),
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.APIResponse{Success: false, Message: "ບໍ່ສາມາດບັນທຶກໄດ້"})

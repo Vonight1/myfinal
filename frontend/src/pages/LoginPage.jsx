@@ -101,7 +101,10 @@ export default function LoginPage() {
                   className="w-full px-4 py-3.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" />
               </div>
               <div>
-                <label className="text-sm font-semibold text-gray-700 block mb-2">ລະຫັດຜ່ານ</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-semibold text-gray-700">ລະຫັດຜ່ານ</label>
+                  <Link to="/forgot-password" className="text-xs text-blue-600 font-medium hover:underline">ລືມລະຫັດຜ່ານ?</Link>
+                </div>
                 <div className="relative">
                   <input value={password} onChange={(e) => setPassword(e.target.value)}
                     type={showPassword ? 'text' : 'password'} required placeholder="ລະຫັດຜ່ານ"

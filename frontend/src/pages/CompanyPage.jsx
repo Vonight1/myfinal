@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { jobsAPI, applicationsAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { useConfirm } from '../context/ConfirmContext';
 import { statusColor, statusLabel } from '../lib/utils';
 
 export default function CompanyPage() {
  const { user, loading: authLoading } = useAuth();
  const navigate = useNavigate();
+ const toast = useToast();
+ const confirm = useConfirm();
  const [tab, setTab] = useState('jobs');
+ const [editingJob, setEditingJob] = useState(null);
  const [myJobs, setMyJobs] = useState([]);
  const [categories, setCategories] = useState([]);
  const [applicants, setApplicants] = useState([]);
@@ -43,7 +48,6 @@ export default function CompanyPage() {
  const handlePostJob = async (e) => {
  e.preventDefault();
  setPosting(true);
- setMsg('');
  try {
  const payload = {
  ...jobForm,
@@ -52,17 +56,61 @@ export default function CompanyPage() {
  salary_max: jobForm.salary_max ? Number(jobForm.salary_max) : null,
  positions: Number(jobForm.positions) || 1,
  };
- const res = await jobsAPI.createJob(payload);
+ // ຖ້າ editing → update, ຖ້າບໍ່ → create
+ const res = editingJob
+ ? await jobsAPI.updateJob(editingJob.id, payload)
+ : await jobsAPI.createJob(payload);
  if (res.data.success) {
- setMsg('ປະກາດວຽກສຳເລັດ! ລໍຖ້າ Admin ອະນຸມັດ.');
+ toast.success(editingJob ? 'ແກ້ໄຂສຳເລັດ!' : 'ປະກາດວຽກສຳເລັດ! ລໍຖ້າ Admin ອະນຸມັດ.');
  setShowModal(false);
+ setEditingJob(null);
  resetForm();
  jobsAPI.getMyJobs().then(r => { if (r.data.success) setMyJobs(r.data.data || []); });
  }
  } catch (err) {
- setMsg(err.response?.data?.message || 'ບໍ່ສາມາດປະກາດໄດ້');
+ toast.error(err.response?.data?.message || 'ບໍ່ສາມາດປະກາດໄດ້');
  } finally {
  setPosting(false);
+ }
+ };
+
+ const openEditJob = (job) => {
+ setEditingJob(job);
+ setJobForm({
+ title: job.title || '',
+ description: job.description || '',
+ requirements: job.requirements || '',
+ category_id: job.category_id || '',
+ salary_min: job.salary_min || '',
+ salary_max: job.salary_max || '',
+ salary_type: job.salary_type || 'monthly',
+ location: job.location || '',
+ job_type: job.job_type || 'part-time',
+ work_days: job.work_days || '',
+ work_hours: job.work_hours || '',
+ positions: job.positions || 1,
+ deadline: job.deadline || '',
+ });
+ setShowModal(true);
+ };
+
+ const handleDeleteJob = async (job) => {
+ const ok = await confirm({
+ title: 'ລົບວຽກນີ້?',
+ message: `ທ່ານແນ່ໃຈບໍ່ວ່າຈະລົບ "${job.title}"? ການກະທຳນີ້ບໍ່ສາມາດກັບຄືນໄດ້ (ການສະໝັກ, reviews ກໍ່ຈະຖືກລົບ)`,
+ confirmText: 'ລົບເລີຍ',
+ cancelText: 'ຍົກເລີກ',
+ variant: 'danger',
+ });
+ if (!ok) return;
+ try {
+ const res = await jobsAPI.deleteJob(job.id);
+ if (res.data.success) {
+ toast.success('ລົບວຽກສຳເລັດ');
+ jobsAPI.getMyJobs().then(r => { if (r.data.success) setMyJobs(r.data.data || []); });
+ }
+ } catch (err) {
+ toast.error(err.response?.data?.message || 'ບໍ່ສາມາດລົບໄດ້');
  }
  };
 
@@ -161,9 +209,20 @@ export default function CompanyPage() {
  </td>
  <td className="px-5 py-3">{j.applicant_count || 0} ຄົນ</td>
  <td className="px-5 py-3">
- <button onClick={() => loadApplicants(j.id)} className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200">
+ <div className="flex gap-1.5">
+ <button onClick={() => loadApplicants(j.id)}
+ className="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg hover:bg-blue-200 font-medium" title="ເບິ່ງຜູ້ສະໝັກ">
  ເບິ່ງ
  </button>
+ <button onClick={() => openEditJob(j)}
+ className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-lg hover:bg-yellow-200 font-medium" title="ແກ້ໄຂວຽກ">
+ ແກ້ໄຂ
+ </button>
+ <button onClick={() => handleDeleteJob(j)}
+ className="text-xs bg-red-100 text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-200 font-medium" title="ລົບວຽກ">
+ ລົບ
+ </button>
+ </div>
  </td>
  </tr>
  ))}
@@ -186,12 +245,12 @@ export default function CompanyPage() {
  {applicants.map(a => (
  <div key={a.id} className="bg-white rounded-2xl border p-5 hover:shadow-md transition-all">
  <div className="flex items-start gap-4">
- <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0">
+ <Link to={`/users/${a.applicant_id || a.id}`} className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0 hover:ring-4 hover:ring-blue-100 transition-all">
  {a.name?.[0]}
- </div>
+ </Link>
  <div className="flex-1 min-w-0">
  <div className="flex items-center gap-3 mb-1">
- <h3 className="font-bold text-gray-800">{a.name}</h3>
+ <Link to={`/users/${a.applicant_id || a.id}`} className="font-bold text-gray-800 hover:text-blue-600 hover:underline">{a.name}</Link>
  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColor[a.status] || 'bg-gray-100'}`}>
  {statusLabel[a.status] || a.status}
  </span>
@@ -268,9 +327,13 @@ export default function CompanyPage() {
  <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
  {/* Header */}
  <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
- <h3 className="font-bold text-xl text-gray-800"> ປະກາດວຽກໃໝ່</h3>
- <button onClick={() => setShowModal(false)} className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 text-gray-500 text-lg">
- 
+ <h3 className="font-bold text-xl text-gray-800">
+ {editingJob ? 'ແກ້ໄຂວຽກ' : 'ປະກາດວຽກໃໝ່'}
+ </h3>
+ <button onClick={() => { setShowModal(false); setEditingJob(null); }}
+ className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 text-gray-500"
+ aria-label="ປິດ">
+ <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 18L18 6M6 6l12 12"/></svg>
  </button>
  </div>
 
@@ -347,12 +410,12 @@ export default function CompanyPage() {
  <button type="submit" disabled={posting}
  className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 shadow-lg shadow-blue-600/30 transition-all flex items-center gap-2">
  {posting ? (
- <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> ກຳລັງປະກາດ...</>
+ <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> ກຳລັງບັນທຶກ...</>
  ) : (
- <> ປະກາດວຽກ</>
+ <>{editingJob ? 'ບັນທຶກການແກ້ໄຂ' : 'ປະກາດວຽກ'}</>
  )}
  </button>
- <button type="button" onClick={() => setShowModal(false)}
+ <button type="button" onClick={() => { setShowModal(false); setEditingJob(null); }}
  className="px-6 py-3 rounded-xl border border-gray-200 text-sm hover:bg-gray-50 font-medium transition-all">
  ຍົກເລີກ
  </button>

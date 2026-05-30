@@ -196,6 +196,21 @@ func MarkNotificationRead(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true})
 }
 
+// MarkAllNotificationsRead - ໝາຍວ່າອ່ານທັງໝົດ
+func MarkAllNotificationsRead(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	config.DB.Exec(`UPDATE notifications SET is_read=true WHERE user_id=$1`, userID)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true})
+}
+
+// GetUnreadCount - ນັບແຈ້ງເຕືອນທີ່ຍັງບໍ່ໄດ້ອ່ານ
+func GetUnreadCount(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	uid, _ := userID.(int)
+	count := CountUnreadNotifications(uid)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"count": count}})
+}
+
 // ==================== COMPLAINTS ====================
 
 // CreateComplaint - User ລາຍງານປັນຫາ
@@ -364,7 +379,7 @@ func ChangePassword(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	var req struct {
 		OldPassword string `json:"old_password" binding:"required"`
-		NewPassword string `json:"new_password" binding:"required,min=6"`
+		NewPassword string `json:"new_password" binding:"required,min=8"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.APIResponse{Success: false, Message: "ຂໍ້ມູນບໍ່ຖືກຕ້ອງ"})

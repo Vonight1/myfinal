@@ -6,6 +6,7 @@ import (
 	"backend/middleware"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -36,6 +37,10 @@ func main() {
 		AllowCredentials: true,
 	}))
 
+	// Global Rate Limit (500 req/min per IP - ສູງເພາະ React StrictMode dev double-calls)
+	globalLimiter := middleware.NewRateLimiter(500, time.Minute)
+	r.Use(globalLimiter.Middleware())
+
 	// Static files (uploads)
 	r.Static("/uploads", "./uploads")
 
@@ -44,10 +49,17 @@ func main() {
 	// ============================================
 	api := r.Group("/api")
 	{
-		// === Auth (ບໍ່ຕ້ອງ login) ===
-		api.POST("/register", handlers.Register)
-		api.POST("/login", handlers.Login)
+		// === Auth (ບໍ່ຕ້ອງ login) - ມີ Rate Limit ປ້ອງກັນ brute force ===
+		authLimiter := middleware.NewRateLimiter(20, time.Minute)
+		api.POST("/register", authLimiter.Middleware(), handlers.Register)
+		api.POST("/login", authLimiter.Middleware(), handlers.Login)
 		api.POST("/create-admin", handlers.CreateAdmin)
+
+		// === Forgot/Reset Password (rate limit ເຂັ້ມງວດ) ===
+		resetLimiter := middleware.NewRateLimiter(10, time.Minute)
+		api.POST("/forgot-password", resetLimiter.Middleware(), handlers.RequestPasswordReset)
+		api.GET("/reset-password/:token/validate", handlers.ValidateResetToken)
+		api.POST("/reset-password", resetLimiter.Middleware(), handlers.ResetPassword)
 
 		// === Public (ບໍ່ຕ້ອງ login) ===
 		api.GET("/jobs", handlers.GetJobs)
@@ -55,6 +67,9 @@ func main() {
 		api.GET("/jobs/:id/reviews", handlers.GetJobReviews)
 		api.GET("/categories", handlers.GetCategories)
 		api.GET("/stats", handlers.GetPublicStats)
+		api.GET("/companies", handlers.GetCompanies)
+		api.GET("/companies/:id", handlers.GetCompanyByID)
+		api.GET("/companies/:id/followers/count", handlers.GetFollowerCount)
 
 		// === Auth Required ===
 		auth := api.Group("/")
@@ -63,6 +78,19 @@ func main() {
 			// Profile
 			auth.GET("/profile", handlers.GetProfile)
 			auth.PUT("/profile", handlers.UpdateProfile)
+			auth.PUT("/change-password", handlers.ChangePassword)
+
+			// View other user's profile (auth required)
+			auth.GET("/users/:id", handlers.GetUserByID)
+
+			// Saved jobs (ບັນທຶກວຽກ)
+			auth.GET("/saved-jobs", handlers.GetSavedJobs)
+			auth.POST("/saved-jobs/:job_id/toggle", handlers.ToggleSaveJob)
+			auth.GET("/saved-jobs/:job_id/check", handlers.CheckJobSaved)
+
+			// Followers
+			auth.POST("/companies/:id/follow", handlers.ToggleFollow)
+			auth.GET("/companies/:id/follow/check", handlers.CheckFollowing)
 
 			// Reviews
 			auth.POST("/jobs/:id/reviews", handlers.CreateReview)
@@ -74,6 +102,7 @@ func main() {
 		{
 			applicant.POST("/jobs/:id/apply", handlers.ApplyJob)
 			applicant.GET("/my-applications", handlers.GetMyApplications)
+			applicant.DELETE("/applications/:id", handlers.CancelApplication)
 		}
 
 		// === Company Routes ===
@@ -82,6 +111,7 @@ func main() {
 		{
 			company.POST("/jobs", handlers.CreateJob)
 			company.PUT("/jobs/:id", handlers.UpdateJob)
+			company.DELETE("/jobs/:id", handlers.DeleteJob)
 			company.GET("/my-jobs", handlers.GetMyJobs)
 			company.GET("/jobs/:id/applicants", handlers.GetJobApplicants)
 			company.PUT("/applications/:id/status", handlers.UpdateApplicationStatus)
@@ -94,6 +124,7 @@ func main() {
 			admin.GET("/dashboard", handlers.GetDashboardStats)
 			admin.GET("/users", handlers.GetAllUsers)
 			admin.PUT("/users/:id/ban", handlers.BanUser)
+			admin.PUT("/users/:id/verify", handlers.VerifyCompany)
 			admin.GET("/jobs", handlers.GetAllJobsAdmin)
 			admin.PUT("/jobs/:id/verify", handlers.VerifyJob)
 			admin.GET("/reviews", handlers.GetAllReviews)
@@ -125,10 +156,14 @@ func main() {
 
 		// === User Notifications & Complaints (ທຸກ user) ===
 		auth.GET("/notifications", handlers.GetMyNotifications)
+		auth.GET("/notifications/unread-count", handlers.GetUnreadCount)
 		auth.PUT("/notifications/:id/read", handlers.MarkNotificationRead)
+		auth.PUT("/notifications/read-all", handlers.MarkAllNotificationsRead)
 		auth.POST("/complaints", handlers.CreateComplaint)
-		auth.POST("/upload-logo", handlers.UploadCompanyLogo)
-		auth.POST("/upload-cover", handlers.UploadCompanyCover)
+
+		// === Upload Logo/Cover (ສະເພາະ Company) ===
+		company.POST("/upload-logo", handlers.UploadCompanyLogo)
+		company.POST("/upload-cover", handlers.UploadCompanyCover)
 	}
 
 	// Start server

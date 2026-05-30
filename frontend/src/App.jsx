@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
+import { ConfirmProvider } from './context/ConfirmContext';
+import { ScrollToTopOnRouteChange, ScrollToTopButton } from './components/ScrollToTop';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -11,12 +14,23 @@ import CompanyPage from './pages/CompanyPage';
 import CompanyProfilePage from './pages/CompanyProfilePage';
 import AdminPage from './pages/AdminPage';
 import ProfilePage from './pages/ProfilePage';
+import UserProfilePage from './pages/UserProfilePage';
+import SavedJobsPage from './pages/SavedJobsPage';
+import CompaniesPage from './pages/CompaniesPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
+import FAQPage from './pages/FAQPage';
+import MyApplicationsPage from './pages/MyApplicationsPage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 function Footer() {
   return (
     <footer className="bg-gray-900 text-white py-12 mt-16">
       <div className="max-w-6xl mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8 mb-8">
           {/* Logo + Description */}
           <div>
             <div className="flex items-center gap-2.5 mb-3">
@@ -43,8 +57,18 @@ function Footer() {
             <div className="space-y-2">
               <a href="/" className="block text-gray-400 text-sm hover:text-white transition-colors">ໜ້າຫຼັກ</a>
               <a href="/jobs" className="block text-gray-400 text-sm hover:text-white transition-colors">ຊອກວຽກ</a>
-              <a href="/new-jobs" className="block text-gray-400 text-sm hover:text-white transition-colors">ວຽກໃໝ່</a>
+              <a href="/companies" className="block text-gray-400 text-sm hover:text-white transition-colors">ບໍລິສັດ</a>
               <a href="/register" className="block text-gray-400 text-sm hover:text-white transition-colors">ສະໝັກສະມາຊິກ</a>
+            </div>
+          </div>
+
+          {/* About Links */}
+          <div>
+            <h4 className="font-bold text-sm mb-4 text-gray-300">ກ່ຽວກັບ</h4>
+            <div className="space-y-2">
+              <a href="/about" className="block text-gray-400 text-sm hover:text-white transition-colors">ກ່ຽວກັບເຮົາ</a>
+              <a href="/contact" className="block text-gray-400 text-sm hover:text-white transition-colors">ຕິດຕໍ່</a>
+              <a href="/faq" className="block text-gray-400 text-sm hover:text-white transition-colors">ຄຳຖາມທີ່ພົບເລື້ອຍ</a>
             </div>
           </div>
 
@@ -82,6 +106,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ToastProvider>
+        <ConfirmProvider>
+        <ScrollToTopOnRouteChange />
         <div className="min-h-screen bg-gray-50 flex flex-col">
           <Navbar />
           <main className="flex-1">
@@ -96,10 +123,24 @@ export default function App() {
               <Route path="/company/profile" element={<CompanyProfilePage />} />
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/users/:id" element={<UserProfilePage />} />
+              <Route path="/saved-jobs" element={<SavedJobsPage />} />
+              <Route path="/companies" element={<CompaniesPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/about" element={<AboutPage />} />
+              <Route path="/contact" element={<ContactPage />} />
+              <Route path="/faq" element={<FAQPage />} />
+              <Route path="/my-applications" element={<MyApplicationsPage />} />
+              <Route path="/change-password" element={<ChangePasswordPage />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </main>
           <Footer />
+          <ScrollToTopButton />
         </div>
+        </ConfirmProvider>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

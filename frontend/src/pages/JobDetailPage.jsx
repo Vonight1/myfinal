@@ -2,13 +2,19 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { jobsAPI, applicationsAPI, reviewsAPI } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { formatSalary } from '../lib/utils';
+import { formatSalary, getFullUrl } from '../lib/utils';
 import CompanyAvatar from '../components/CompanyAvatar';
+import SaveJobButton from '../components/SaveJobButton';
+import ShareButton from '../components/ShareButton';
+import { useToast } from '../context/ToastContext';
+
+const defaultCover = 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&q=80';
 
 export default function JobDetailPage() {
  const { id } = useParams();
  const { user } = useAuth();
  const navigate = useNavigate();
+ const toast = useToast();
  const fileInputRef = useRef(null);
 
  const [job, setJob] = useState(null);
@@ -133,7 +139,7 @@ export default function JobDetailPage() {
  if (!job) return <div className="text-center py-32"><div className="text-5xl mb-4"></div><h2 className="text-xl font-bold">ບໍ່ພົບວຽກ</h2><Link to="/jobs" className="text-blue-600 mt-4 inline-block">← ກັບຄືນ</Link></div>;
 
  return (
- <div className="max-w-4xl mx-auto px-4 py-8">
+ <div className="max-w-4xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
  <Link to="/jobs" className="text-blue-600 text-sm mb-4 inline-block hover:underline">← ກັບຄືນ</Link>
 
  {msg.text && (
@@ -143,55 +149,88 @@ export default function JobDetailPage() {
  )}
 
  {/* Job Detail Card */}
- <div className="bg-white rounded-2xl shadow-sm border mb-6 overflow-hidden">
- {/* Cover Image */}
- <div className="relative h-40 md:h-56 bg-gradient-to-br from-blue-400 to-indigo-600">
- {job.company_cover && (
- <img src={`http://localhost:8080${job.company_cover}`} alt="" className="absolute inset-0 w-full h-full object-cover" />
- )}
- <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+ <div className="bg-white rounded-2xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
+ {/* Cover Image - ສະອາດ ບໍ່ມີ logo ບັງ */}
+ <div className="relative h-48 md:h-64 bg-gradient-to-br from-blue-400 to-indigo-600 overflow-hidden">
+ <img
+ src={job.company_cover ? getFullUrl(job.company_cover) : defaultCover}
+ alt={job.company_name}
+ loading="lazy"
+ className="w-full h-full object-cover"
+ onError={(e) => { e.target.src = defaultCover; }}
+ />
  </div>
- <div className="p-6">
- <div className="flex items-start gap-4 mb-6 -mt-16">
- <CompanyAvatar logo={job.company_logo} name={job.company_name} size="3xl" className="ring-4 ring-white" />
- <div className="pt-16">
- <h1 className="text-2xl font-bold text-gray-800">{job.title}</h1>
- <p className="text-gray-500">{job.company_name}</p>
- <div className="flex gap-2 mt-2 flex-wrap">
- <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-medium">{job.job_type}</span>
- <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
- {job.status === 'approved' ? 'ກຳລັງຮັບ' : job.status}
+
+ {/* Logo Card + Stats Row */}
+ <div className="relative px-6 -mt-10 flex items-end justify-between gap-3 flex-wrap">
+ <Link to={`/users/${job.company_id}`} className="w-20 h-20 bg-white rounded-2xl shadow-md border border-gray-100 p-2 shrink-0 hover:border-blue-300 hover:shadow-lg transition-all" title="ເບິ່ງ profile ບໍລິສັດ">
+ <CompanyAvatar
+ logo={job.company_logo}
+ name={job.company_name}
+ size="sm"
+ className="!w-full !h-full !rounded-xl shadow-none"
+ />
+ </Link>
+ <div className="flex items-center gap-3 pb-2">
+ <div className="flex items-center gap-3 text-xs text-gray-500">
+ <span className="flex items-center gap-1">
+ <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+ {job.views_count} ຄັ້ງ
  </span>
+ <span>•</span>
+ <span><span className="font-semibold text-gray-700">{job.applicant_count || 0}</span> ສະໝັກແລ້ວ</span>
  </div>
+ <SaveJobButton jobId={job.id} variant="button" />
+ <ShareButton url={`/jobs/${job.id}`} title={job.title} />
+ </div>
+ </div>
+
+ {/* Content */}
+ <div className="px-6 pt-4 pb-6">
+ {/* Title + Company + Tags */}
+ <div className="mb-6">
+ <h1 className="text-2xl md:text-3xl font-bold text-gray-800">{job.title}</h1>
+ <Link to={`/users/${job.company_id}`} className="text-gray-500 mt-1 flex items-center gap-2 hover:text-blue-600 w-fit group/link">
+ <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16M9 7h6M9 11h6M9 15h6"/></svg>
+ <span className="group-hover/link:underline">{job.company_name}</span>
+ <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-0 group-hover/link:opacity-100 transition-opacity"><path d="M7 17L17 7M7 7h10v10"/></svg>
+ </Link>
+ <div className="flex gap-2 mt-3 flex-wrap">
+ <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold border border-blue-100">{job.job_type}</span>
+ <span className="bg-green-50 text-green-700 px-3 py-1 rounded-full text-xs font-semibold border border-green-100">
+ {job.status === 'approved' ? 'ກຳລັງຮັບສະໝັກ' : job.status}
+ </span>
+ {job.category_name && (
+ <span className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-xs font-semibold border border-purple-100">{job.category_name}</span>
+ )}
  </div>
  </div>
 
  {/* Info Grid */}
- <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+ <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
  {[
- [' ເງິນເດືອນ', formatSalary(job.salary_min, job.salary_max, job.salary_type)],
- [' ສະຖານທີ່', job.location],
- [' ເວລາ', job.work_hours || '-'],
- [' ວັນ', job.work_days || '-'],
- [' ຮັບ', `${job.positions} ຕຳແໜ່ງ`],
- [' ເບິ່ງ', `${job.views_count} ຄັ້ງ`],
- ].map(([l, v], i) => (
- <div key={i} className="bg-gray-50 rounded-xl p-3">
- <div className="text-xs text-gray-500">{l}</div>
- <div className="font-semibold text-sm mt-1">{v}</div>
+ ['ເງິນເດືອນ', formatSalary(job.salary_min, job.salary_max, job.salary_type), 'text-blue-700'],
+ ['ສະຖານທີ່', job.location, 'text-gray-800'],
+ ['ເວລາ', job.work_hours || '-', 'text-gray-800'],
+ ['ວັນ', job.work_days || '-', 'text-gray-800'],
+ ['ຮັບ', `${job.positions} ຕຳແໜ່ງ`, 'text-gray-800'],
+ ].map(([l, v, color], i) => (
+ <div key={i} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+ <div className="text-[10px] text-gray-500 uppercase tracking-wide">{l}</div>
+ <div className={`font-bold text-sm mt-1 ${color}`}>{v}</div>
  </div>
  ))}
  </div>
 
  {/* Description */}
  <div className="mb-6">
- <h3 className="font-bold mb-2"> ລາຍລະອຽດ</h3>
+ <h3 className="font-bold text-gray-800 mb-2 text-base">ລາຍລະອຽດ</h3>
  <p className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{job.description}</p>
  </div>
  {job.requirements && (
  <div className="mb-6">
- <h3 className="font-bold mb-2"> ຄຸນສົມບັດ</h3>
- <p className="text-gray-600 text-sm whitespace-pre-line">{job.requirements}</p>
+ <h3 className="font-bold text-gray-800 mb-2 text-base">ຄຸນສົມບັດ</h3>
+ <p className="text-gray-600 text-sm whitespace-pre-line leading-relaxed">{job.requirements}</p>
  </div>
  )}
 

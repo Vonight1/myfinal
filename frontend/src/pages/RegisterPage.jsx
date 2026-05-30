@@ -29,7 +29,7 @@ export default function RegisterPage() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'ຮູບແບບອີເມວບໍ່ຖືກຕ້ອງ';
     if (form.phone && !/^0\d{9,10}$/.test(form.phone.replace(/\s/g, ''))) e.phone = 'ເບີໂທບໍ່ຖືກຕ້ອງ';
     if (!form.password) e.password = 'ກະລຸນາປ້ອນລະຫັດຜ່ານ';
-    else if (form.password.length < 6) e.password = 'ລະຫັດຜ່ານຕ້ອງມີຢ່າງໜ້ອຍ 6 ຕົວ';
+    else if (form.password.length < 8) e.password = 'ລະຫັດຜ່ານຕ້ອງມີຢ່າງໜ້ອຍ 8 ຕົວ';
     if (form.password !== form.confirmPassword) e.confirmPassword = 'ລະຫັດຜ່ານບໍ່ກົງກັນ';
     if (role === 'company' && !form.company_name.trim()) e.company_name = 'ກະລຸນາປ້ອນຊື່ບໍລິສັດ';
     setErrors(e);
@@ -166,7 +166,7 @@ export default function RegisterPage() {
                   <label className="text-sm font-semibold text-gray-700 block mb-2">ລະຫັດຜ່ານ <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <input name="password" type={showPassword ? 'text' : 'password'} value={form.password} onChange={handleChange}
-                      placeholder="ຢ່າງໜ້ອຍ 6 ຕົວ" className={`${inputClass('password')} pr-16`} />
+                      placeholder="ຢ່າງໜ້ອຍ 8 ຕົວ" className={`${inputClass('password')} pr-16`} />
                     <button type="button" onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs font-medium">
                       {showPassword ? 'ເຊື່ອງ' : 'ສະແດງ'}

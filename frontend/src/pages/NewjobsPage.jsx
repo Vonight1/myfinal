@@ -59,7 +59,7 @@ export default function NewJobsPage() {
  setTotal(res.data.total || 0);
  setTotalPages(res.data.total_pages || 1);
  }
- } catch (err) { console.error(err); }
+ } catch (err) { if (import.meta.env.DEV) console.error(err); }
  finally { setLoading(false); }
  };
 
